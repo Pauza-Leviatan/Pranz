@@ -338,10 +338,10 @@
       </div>
       <div class="dupa">
         <p>După masă · opțional · poți bifa mai multe</p>
-        <div class="dupas">
-          <button class="dupabtn" data-act="Table">🎲 Joc table</button>
-          <button class="dupabtn" data-act="Ping pong">🏓 Ping pong</button>
-          <button class="dupabtn" data-act="Țigară">🚬 Ies la țigară</button>
+        <div class="dupas" id="dupas"></div>
+        <div class="altwrap" id="dupaAltwrap">
+          <input type="text" class="altinput" id="dupaAltinput" maxlength="30" placeholder="Scrie activitatea (ex. Șah, Plimbare)">
+          <button class="altsave" id="dupaAltsave">Salvează</button>
         </div>
       </div>
     </div>
@@ -349,7 +349,7 @@
 
   <section class="panel">
     <div class="panel-head">
-      <h2>Cu cine mergi?</h2>
+      <h2>Pe ce mergi?</h2>
       <span class="meta" id="grpMeta">0/20 au bifat</span>
     </div>
     <div id="groups"></div>
@@ -390,7 +390,7 @@
   /* ============================================================
      CONFIGURARE — lipește aici URL-ul Web App din Google Apps Script
      (vezi README.md, pasul 1). Exemplu:
-     const SYNC_URL = "https://script.google.com/macros/s/AKfycbyimqoAPVrX3GP_kQSTRgC4MTbz1qdBJ_FOCSOv1eMb9swqzasjOnNwwb8sl6FzhsfkzA/exec";
+     const SYNC_URL = "https://script.google.com/macros/s/AKfycb.../exec";
      ============================================================ */
   const SYNC_URL = "https://script.google.com/macros/s/AKfycbwL7pYoN3qfNJfRjpI22snF6Zu1dIUQ3YBRYVmJcimUS0Ux8duj5Ik9TXdBV8374ZbvKA/exec";
 
@@ -421,6 +421,11 @@
     {act:"Ping pong", icon:"🏓", title:"Ping pong"},
     {act:"Țigară", icon:"🚬", title:"Țigară"}
   ];
+  const ACT_PREFIX = "act:";
+  const actIcon = a => { const m = DUPA_ACTS.find(x=>x.act===a); return m ? m.icon : "✨"; };
+  const actTitle = a => { const m = DUPA_ACTS.find(x=>x.act===a); return m ? m.title : a; };
+  function realPlaces(){ return customPlaces.filter(p=>p.indexOf(ACT_PREFIX)!==0); }
+  function customActs(){ return customPlaces.filter(p=>p.indexOf(ACT_PREFIX)===0).map(p=>p.slice(ACT_PREFIX.length)); }
 
   const CAT_OF = v => v==="Am gătit / de acasă" ? "gatit"
     : v==="Mănânc ceva repede (15 min)" ? "rapid"
@@ -569,13 +574,13 @@
       const title=s.name==="Fabrica de Ciorbe"?"Fabrica Ciorbe":s.name==="Tamashi Sushi"?"Tamashi":s.name;
       g.push({cat:"ies",title:title,match:v=>v===val});
     }
-    for(const p of customPlaces){
+    for(const p of realPlaces()){
       const val="Ies: "+p;
       g.push({cat:"ies",title:p,match:v=>v===val,custom:true});
     }
     const known=new Set(["Am gătit / de acasă","Mănânc ceva repede (15 min)","Merg la Mega Image","Merg la Hub","Dau comandă","Nu mănânc, am treabă","Ping pong"]);
     for(const s of STATIC_SUBS)known.add("Ies: "+s.name);
-    for(const p of customPlaces)known.add("Ies: "+p);
+    for(const p of realPlaces())known.add("Ies: "+p);
     g.push({cat:"ies",title:"Alt loc",match:v=>v.indexOf("Ies:")===0&&!known.has(v),alt:true});
     g.push({cat:"rapid",title:"Rapid · 15 min",match:v=>v==="Mănânc ceva repede (15 min)"});
     g.push({cat:"mega",title:"Mega Image",match:v=>v==="Merg la Mega Image"});
@@ -621,8 +626,33 @@
       w.appendChild(b);
     };
     for(const s of STATIC_SUBS)mk(s.name,s.note,"Ies: "+s.name,false);
-    for(const p of customPlaces)mk(p,"ADĂUGAT DE ECHIPĂ","Ies: "+p,true);
+    for(const p of realPlaces())mk(p,"ADĂUGAT DE ECHIPĂ","Ies: "+p,true);
     mk("Alt loc…","ADAUGĂ UN LOC NOU","__ALT__",false);
+  }
+  function renderDupas(){
+    const w=$("dupas");w.innerHTML="";
+    const locked=isPast(current);
+    const mk=(act,label,isAdd)=>{
+      const b=document.createElement("button");
+      b.className="dupabtn"+(isAdd?" addact":"");
+      if(!isAdd)b.dataset.act=act;
+      b.disabled=locked;
+      b.textContent=label;
+      b.addEventListener("click",()=>{
+        if(isAdd){
+          const aw=$("dupaAltwrap");
+          aw.classList.toggle("open");
+          if(aw.classList.contains("open"))$("dupaAltinput").focus();
+          return;
+        }
+        $("dupaAltwrap").classList.remove("open");
+        toggleAct(act);
+      });
+      w.appendChild(b);
+    };
+    for(const a of DUPA_ACTS)mk(a.act,a.icon+" "+a.title,false);
+    for(const a of customActs())mk(a,"✨ "+a,false);
+    mk(null,"➕ Altceva…",true);
   }
   function renderDate(){
     const d=current;
@@ -633,8 +663,10 @@
     $("lockmsg").classList.toggle("show",locked);
     document.querySelectorAll(".optbtn,.dupabtn").forEach(b=>b.disabled=locked);
     $("altinput").disabled=locked;$("altsave").disabled=locked;
+    $("dupaAltinput").disabled=locked;$("dupaAltsave").disabled=locked;
     renderTabs();
     renderSubs();
+    renderDupas();
   }
   function renderChoice(){
     const myVal=me?(dayData[me]||null):null;
@@ -652,7 +684,7 @@
     });
     if(isIes)$("subwrap").classList.add("open");
     let st=me?(myVal?SHORT(myVal):"NEBIFAT"):"—";
-    if(me&&myActs.length)st+=" · "+myActs.map(a=>DUPA_ACTS.find(x=>x.act===a).icon).join("");
+    if(me&&myActs.length)st+=" · "+myActs.map(actIcon).join("");
     $("myStatus").textContent=st;
   }
   function renderAll(){
@@ -688,10 +720,11 @@
 
     // după masă panel
     const dw=$("dupaGroups");dw.innerHTML="";
-    let dTotal=0;
-    for(const a of DUPA_ACTS){
+    const actRows=DUPA_ACTS.map(a=>({act:a.act,icon:a.icon,title:a.title,custom:false}))
+      .concat(customActs().map(a=>({act:a,icon:"✨",title:a,custom:true})));
+    for(const a of actRows){
       const ppl=NAMES.filter(n=>(dupaData[n]||[]).indexOf(a.act)>=0);
-      dTotal+=ppl.length?1:0;
+      if(a.custom&&!ppl.length)continue;
       const div=document.createElement("div");
       div.className="grp g-dupa"+(ppl.length?"":" empty");
       const names=ppl.length
@@ -712,8 +745,7 @@
       if(n===me)tr.className="merow";
       let cell='<span class="badge '+(cat?"b-"+cat:"b-none")+'">'+esc(SHORT(v))+"</span>";
       for(const a of acts){
-        const meta=DUPA_ACTS.find(x=>x.act===a);
-        if(meta)cell+='<span class="mini" title="'+esc(meta.title)+'">'+meta.icon+"</span>";
+        cell+='<span class="mini" title="'+esc(actTitle(a))+'">'+actIcon(a)+"</span>";
       }
       tr.innerHTML='<td class="nr">'+String(i+1).padStart(2,"0")+'</td>'+
         '<td class="nume">'+esc(n)+"</td>"+
@@ -783,9 +815,9 @@
     if(!p){toast("Scrie întâi locul");$("altinput").focus();return;}
     if(!me){toast("Alege-ți întâi numele");$("whoami").focus();return;}
     const lower=p.toLowerCase();
-    const canon=customPlaces.find(x=>x.toLowerCase()===lower)
+    const canon=realPlaces().find(x=>x.toLowerCase()===lower)
       || STATIC_SUBS.map(s=>s.name).find(x=>x.toLowerCase()===lower) || p;
-    const isNew=!customPlaces.some(x=>x.toLowerCase()===lower)&&!STATIC_SET.has(lower);
+    const isNew=!realPlaces().some(x=>x.toLowerCase()===lower)&&!STATIC_SET.has(lower);
     if(isNew){
       customPlaces.push(canon);
       await sendOp({action:"place",name:canon});
@@ -813,9 +845,27 @@
       pick(b.dataset.val);
     });
   });
-  document.querySelectorAll(".dupabtn").forEach(b=>{
-    b.addEventListener("click",()=>toggleAct(b.dataset.act));
-  });
+  async function saveDupaAlt(){
+    const p=$("dupaAltinput").value.trim();
+    if(!p){toast("Scrie întâi activitatea");$("dupaAltinput").focus();return;}
+    if(!me){toast("Alege-ți întâi numele");$("whoami").focus();return;}
+    const lower=p.toLowerCase();
+    const canon=customActs().find(x=>x.toLowerCase()===lower)
+      || DUPA_ACTS.map(a=>a.act).find(x=>x.toLowerCase()===lower) || p;
+    const isNew=!customActs().some(x=>x.toLowerCase()===lower)
+      && !DUPA_ACTS.some(a=>a.act.toLowerCase()===lower);
+    if(isNew){
+      customPlaces.push(ACT_PREFIX+canon);
+      await sendOp({action:"place",name:ACT_PREFIX+canon});
+    }
+    $("dupaAltinput").value="";
+    $("dupaAltwrap").classList.remove("open");
+    renderDupas();
+    await toggleAct(canon);
+    if(isNew)toast("Salvat · «"+canon+"» adăugat pentru toți");
+  }
+  $("dupaAltsave").addEventListener("click",saveDupaAlt);
+  $("dupaAltinput").addEventListener("keydown",e=>{if(e.key==="Enter")saveDupaAlt();});
   $("altsave").addEventListener("click",saveAlt);
   $("altinput").addEventListener("keydown",e=>{if(e.key==="Enter")saveAlt();});
   $("prevDay").addEventListener("click",()=>gotoDate(nextWork(current,-1)));
@@ -825,7 +875,7 @@
   setInterval(async()=>{
     if(!current)return;
     await refresh(key(current),true);
-    renderSubs();renderChoice();renderAll();
+    renderSubs();renderDupas();renderChoice();renderAll();
   },30000);
 
   (async function init(){
